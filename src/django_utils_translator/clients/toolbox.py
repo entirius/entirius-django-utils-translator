@@ -2,53 +2,24 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Thin HTTP client for the remote AI toolbox service.
+"""Translator endpoints on top of the shared toolbox client (``django_utils.toolbox``).
 
-Owns zero business logic. Sends requests, maps errors, returns parsed JSON.
+Owns zero business logic. Transport, retry, errors and settings live in the base client.
 The toolbox is the single source of truth for jobs, costs, usage, translations.
 """
 
 from __future__ import annotations
 
-import logging
-import re
-import time
 from decimal import Decimal
 
-import httpx
+from django_utils.toolbox import ToolboxClient as BaseToolboxClient
 
-from django_utils_translator.settings import (
-    AI_TOOLBOX_API_KEY,
-    AI_TOOLBOX_BASE_URL,
-    AI_TOOLBOX_MAX_RETRIES,
-    AI_TOOLBOX_TIMEOUT,
-)
-
-from .errors import (
-    ToolboxAuthError,
-    ToolboxBudgetExceededError,
-    ToolboxConnectionError,
-    ToolboxError,
-    ToolboxNotFoundError,
-    ToolboxRateLimitError,
-    ToolboxServerError,
-    ToolboxValidationError,
-)
-
-logger = logging.getLogger("process")
-
-# Suppress httpx debug logging — prevents API key leak in X-API-Key header.
-logging.getLogger("httpx").setLevel(logging.WARNING)
-
-_RETRYABLE_STATUSES: frozenset[int] = frozenset({408, 429, 500, 502, 503, 504})
-_RETRY_BASE_DELAY = 2.0
-_RETRY_MAX_DELAY = 60.0
 _DEFAULT_PROVIDER = "deepl"
-_CHANNEL_IDX_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+_TRANSLATOR_TOOL = "ai-translator"
 
 
-class ToolboxClient:
-    """Synchronous HTTP client for the AI toolbox REST API.
+class ToolboxClient(BaseToolboxClient):
+    """Synchronous HTTP client for the AI toolbox translator API.
 
     Usage::
 
@@ -57,22 +28,6 @@ class ToolboxClient:
     """
 
     _ESTIMATE_BATCH_SIZE = 50  # Toolbox /estimate/ accepts max 50 items per request.
-
-    def __init__(self, channel_idx: str, max_retries: int | None = None) -> None:
-        if not AI_TOOLBOX_BASE_URL:
-            raise ValueError("AI_TOOLBOX_BASE_URL is not configured in Django settings.")
-        if not AI_TOOLBOX_API_KEY:
-            raise ValueError("AI_TOOLBOX_API_KEY is not configured in Django settings.")
-        if not _CHANNEL_IDX_PATTERN.match(channel_idx):
-            raise ValueError(f"Invalid channel_idx: {channel_idx!r}")
-
-        self._channel_idx = channel_idx
-        self._max_retries = max_retries if max_retries is not None else AI_TOOLBOX_MAX_RETRIES
-        self._base_url = AI_TOOLBOX_BASE_URL.rstrip("/")
-        self._client = httpx.Client(
-            headers={"X-API-Key": AI_TOOLBOX_API_KEY},
-            timeout=AI_TOOLBOX_TIMEOUT,
-        )
 
     # --- Translator endpoints ---
 
@@ -182,93 +137,4 @@ class ToolboxClient:
     # --- URL helpers ---
 
     def _translator_url(self, path: str) -> str:
-        return f"{self._base_url}/api/ai-translator/v2/admin/{self._channel_idx}/{path}"
-
-    # --- Transport ---
-
-    def _get(self, url: str, params: dict | None = None) -> dict:
-        return self._request("GET", url, params=params)
-
-    def _post(self, url: str, payload: dict) -> dict:
-        return self._request("POST", url, json=payload)
-
-    def _request(self, method: str, url: str, **kwargs) -> dict:
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries):
-            try:
-                response = self._client.request(method, url, **kwargs)
-                self._raise_for_status(response)
-                return response.json()
-            except ToolboxError as exc:
-                last_error = exc
-                if not self._is_retryable(exc):
-                    raise
-                self._sleep_before_retry(attempt, exc)
-            except httpx.HTTPError as exc:
-                last_error = exc
-                if attempt >= self._max_retries - 1:
-                    break
-                self._sleep_before_retry(attempt, None)
-
-        if isinstance(last_error, ToolboxError):
-            raise last_error
-        raise ToolboxConnectionError(type(last_error).__name__ if last_error else "unknown")
-
-    def _raise_for_status(self, response: httpx.Response) -> None:
-        if response.is_success:
-            return
-
-        status = response.status_code
-        body = self._safe_json(response)
-        message = body.get("message", response.text[:200])
-
-        if status in (401, 403):
-            raise ToolboxAuthError()
-        if status == 402:
-            raise ToolboxBudgetExceededError(message)
-        if status == 404:
-            raise ToolboxNotFoundError(message)
-        if status == 429:
-            retry_after = response.headers.get("Retry-After")
-            raise ToolboxRateLimitError(float(retry_after) if retry_after else None)
-        if status == 400:
-            raise ToolboxValidationError(message=message, details=body.get("details", []))
-        if status >= 500:
-            raise ToolboxServerError(status, message)
-        raise ToolboxError(status, message)
-
-    def _is_retryable(self, error: ToolboxError) -> bool:
-        if isinstance(
-            error, (ToolboxAuthError, ToolboxValidationError, ToolboxNotFoundError, ToolboxBudgetExceededError)
-        ):
-            return False
-        return error.status_code in _RETRYABLE_STATUSES
-
-    def _sleep_before_retry(self, attempt: int, error: ToolboxError | None) -> None:
-        if isinstance(error, ToolboxRateLimitError) and error.retry_after is not None:
-            delay = min(error.retry_after, _RETRY_MAX_DELAY)
-        else:
-            delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
-        logger.warning(
-            "Toolbox request failed (attempt %d/%d), retrying in %.1fs", attempt + 1, self._max_retries, delay
-        )
-        time.sleep(delay)
-
-    @staticmethod
-    def _safe_json(response: httpx.Response) -> dict:
-        try:
-            return response.json()
-        except (ValueError, TypeError):
-            return {}
-
-    # --- Lifecycle ---
-
-    def close(self) -> None:
-        self._client.close()
-
-    def __enter__(self) -> ToolboxClient:
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.close()
+        return self._url(_TRANSLATOR_TOOL, path)

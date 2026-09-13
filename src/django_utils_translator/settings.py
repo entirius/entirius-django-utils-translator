@@ -4,17 +4,18 @@
 
 """Shared settings for AI translation modules.
 
-Required in service settings_local.py:
-    AI_TOOLBOX_BASE_URL = "https://ai-toolbox.internal:8000"
-    AI_TOOLBOX_API_KEY = "ent_live_AbCdEf..."
+``AI_TOOLBOX_*`` are re-exported lazily from ``django_utils.toolbox.settings`` (documented there).
 """
 
-from django.conf import settings
+from typing import Any
 
-AI_TOOLBOX_BASE_URL: str = getattr(settings, "AI_TOOLBOX_BASE_URL", "")
-AI_TOOLBOX_API_KEY: str = getattr(settings, "AI_TOOLBOX_API_KEY", "")
-AI_TOOLBOX_TIMEOUT: float = getattr(settings, "AI_TOOLBOX_TIMEOUT", 60.0)
-AI_TOOLBOX_MAX_RETRIES: int = getattr(settings, "AI_TOOLBOX_MAX_RETRIES", 3)
+from django.conf import settings
+from django_utils.toolbox import settings as toolbox_settings
+
+
+def __getattr__(name: str) -> Any:
+    return getattr(toolbox_settings, name)
+
 
 # Language code → provider language code (DeepL format).
 # Override in Django settings as AI_TRANSLATOR_LANGUAGE_CODE_MAP.

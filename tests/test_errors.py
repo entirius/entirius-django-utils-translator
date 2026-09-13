@@ -2,106 +2,37 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Tests for the toolbox exception hierarchy."""
+"""The translator's error hierarchy is the shared one from django_utils.toolbox."""
 
-from django_utils_translator.clients.errors import (
-    ToolboxAuthError,
-    ToolboxBudgetExceededError,
-    ToolboxConnectionError,
-    ToolboxError,
-    ToolboxNotFoundError,
-    ToolboxRateLimitError,
-    ToolboxServerError,
-    ToolboxValidationError,
-)
+import django_utils.toolbox.errors as shared_errors
+import pytest
+
+from django_utils_translator.clients import errors
 
 
-class TestToolboxError:
-    def test_base_error_attributes(self):
-        exc = ToolboxError(500, "Server error")
-        assert exc.status_code == 500
-        assert exc.message == "Server error"
-        assert "500" in str(exc)
-
-    def test_base_error_is_exception(self):
-        assert issubclass(ToolboxError, Exception)
+@pytest.mark.parametrize("name", errors.__all__)
+def test_error_is_reexported_from_django_utils(name):
+    assert getattr(errors, name) is getattr(shared_errors, name)
 
 
-class TestToolboxAuthError:
-    def test_defaults(self):
-        exc = ToolboxAuthError()
-        assert exc.status_code == 401
-        assert "Authentication failed" in exc.message
-
-    def test_is_toolbox_error(self):
-        assert issubclass(ToolboxAuthError, ToolboxError)
+def test_every_error_is_a_toolbox_error():
+    for name in errors.__all__:
+        assert issubclass(getattr(errors, name), errors.ToolboxError)
 
 
-class TestToolboxNotFoundError:
-    def test_default_message(self):
-        exc = ToolboxNotFoundError()
-        assert exc.status_code == 404
-        assert exc.message == "Resource not found"
+def test_base_error_attributes():
+    exc = errors.ToolboxError(500, "Server error", code="INTERNAL_ERROR", field_errors={"x": ["bad"]})
 
-    def test_custom_message(self):
-        exc = ToolboxNotFoundError("Job abc123 not found")
-        assert exc.message == "Job abc123 not found"
-        assert exc.status_code == 404
-
-
-class TestToolboxValidationError:
-    def test_with_details(self):
-        details = [{"field": "items", "issue": "REQUIRED"}]
-        exc = ToolboxValidationError(message="Validation failed", details=details)
-        assert exc.status_code == 400
-        assert exc.message == "Validation failed"
-        assert exc.details == details
-
-    def test_defaults_empty_details(self):
-        exc = ToolboxValidationError(message="Bad input")
-        assert exc.details == []
+    assert (exc.status_code, exc.message, exc.code, exc.field_errors) == (
+        500,
+        "Server error",
+        "INTERNAL_ERROR",
+        {"x": ["bad"]},
+    )
+    assert "500" in str(exc)
 
 
-class TestToolboxBudgetExceededError:
-    def test_default_message(self):
-        exc = ToolboxBudgetExceededError()
-        assert exc.status_code == 402
-        assert "budget" in exc.message.lower()
+def test_rate_limit_keeps_retry_after():
+    exc = errors.ToolboxRateLimitError(429, "Rate limited", retry_after=30.0)
 
-    def test_custom_message(self):
-        exc = ToolboxBudgetExceededError("Limit reached: $50.00")
-        assert exc.message == "Limit reached: $50.00"
-
-
-class TestToolboxRateLimitError:
-    def test_without_retry_after(self):
-        exc = ToolboxRateLimitError()
-        assert exc.status_code == 429
-        assert exc.retry_after is None
-        assert "Rate limit" in exc.message
-
-    def test_with_retry_after(self):
-        exc = ToolboxRateLimitError(retry_after=30.0)
-        assert exc.retry_after == 30.0
-        assert "30.0s" in exc.message
-
-
-class TestToolboxServerError:
-    def test_preserves_status_code(self):
-        exc = ToolboxServerError(503, "Service Unavailable")
-        assert exc.status_code == 503
-        assert exc.message == "Service Unavailable"
-
-    def test_inherits_from_base(self):
-        exc = ToolboxServerError(500, "Internal")
-        assert isinstance(exc, ToolboxError)
-
-
-class TestToolboxConnectionError:
-    def test_cause_in_message(self):
-        exc = ToolboxConnectionError("ConnectTimeout")
-        assert exc.status_code == 0
-        assert "ConnectTimeout" in exc.message
-
-    def test_is_toolbox_error(self):
-        assert issubclass(ToolboxConnectionError, ToolboxError)
+    assert exc.retry_after == 30.0
