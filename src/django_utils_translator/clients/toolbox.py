@@ -11,8 +11,12 @@ The toolbox is the single source of truth for jobs, costs, usage, translations.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from django_utils.toolbox import ToolboxClient as BaseToolboxClient
+from django_utils.toolbox import ToolboxError
+
+from .errors import to_legacy_error
 
 _DEFAULT_PROVIDER = "deepl"
 _TRANSLATOR_TOOL = "ai-translator"
@@ -28,6 +32,19 @@ class ToolboxClient(BaseToolboxClient):
     """
 
     _ESTIMATE_BATCH_SIZE = 50  # Toolbox /estimate/ accepts max 50 items per request.
+
+    def __init__(self, channel_idx: str | None = None, *, max_retries: int | None = None) -> None:
+        try:
+            super().__init__(channel_idx, max_retries=max_retries)
+        except ToolboxError as exc:
+            raise to_legacy_error(exc) from None
+
+    def _send(self, method: str, url: str, **kwargs) -> Any:
+        """Raise the translator's 2.0.x error classes (subclasses of the shared ones)."""
+        try:
+            return super()._send(method, url, **kwargs)
+        except ToolboxError as exc:
+            raise to_legacy_error(exc) from None
 
     # --- Translator endpoints ---
 
@@ -107,7 +124,7 @@ class ToolboxClient(BaseToolboxClient):
         context: str | None = None,
         metadata: dict | None = None,
     ) -> dict:
-        """POST /jobs/ — create async translation job. Returns 202."""
+        """POST /jobs/ — create async translation job. Returns 202. Paid: never re-sent once it may have arrived."""
         payload: dict = {"items": items, "target_language": target_language, "provider": provider or _DEFAULT_PROVIDER}
         if source_language:
             payload["source_language"] = source_language
@@ -117,7 +134,7 @@ class ToolboxClient(BaseToolboxClient):
             payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
-        return self._post(self._translator_url("jobs/"), payload)
+        return self._post(self._translator_url("jobs/"), payload, retry=False)
 
     def get_job(self, job_id: str) -> dict:
         """GET /jobs/{id}/ — poll job status."""

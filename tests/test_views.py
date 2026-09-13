@@ -2,9 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Tests for handle_toolbox_error as the translator modules use it."""
-
-import django_utils.toolbox.views as shared_views
+"""Tests for handle_toolbox_error DRF response mapper."""
 
 from django_utils_translator.clients.errors import (
     ToolboxAuthError,
@@ -18,13 +16,9 @@ from django_utils_translator.clients.errors import (
 from django_utils_translator.views import handle_toolbox_error
 
 
-def test_is_the_shared_handler():
-    assert handle_toolbox_error is shared_views.handle_toolbox_error
-
-
 class TestHandleToolboxErrorBudget:
     def test_returns_402(self):
-        exc = ToolboxBudgetExceededError(402, "Budget hit", "BUDGET_EXCEEDED")
+        exc = ToolboxBudgetExceededError("Budget hit")
         response = handle_toolbox_error(exc)
         assert response.status_code == 402
         assert response.data["error"] == "BUDGET_EXCEEDED"
@@ -33,32 +27,32 @@ class TestHandleToolboxErrorBudget:
 
 class TestHandleToolboxErrorNotFound:
     def test_returns_404(self):
-        exc = ToolboxNotFoundError(404, "Job not found")
+        exc = ToolboxNotFoundError("Job not found")
         response = handle_toolbox_error(exc)
         assert response.status_code == 404
         assert response.data["error"] == "NOT_FOUND"
 
 
 class TestHandleToolboxErrorValidation:
-    def test_returns_400_with_field_errors(self):
-        field_errors = {"items": ["This field is required."]}
-        exc = ToolboxValidationError(400, "Validation failed", "VALIDATION_ERROR", field_errors)
+    def test_returns_400_with_details(self):
+        details = [{"field": "items", "issue": "REQUIRED"}]
+        exc = ToolboxValidationError(message="Validation failed", details=details)
         response = handle_toolbox_error(exc)
         assert response.status_code == 400
         assert response.data["error"] == "VALIDATION_ERROR"
-        assert response.data["field_errors"] == field_errors
+        assert response.data["details"] == details
 
 
 class TestHandleToolboxErrorRateLimit:
     def test_returns_429_with_retry_header(self):
-        exc = ToolboxRateLimitError(429, "Rate limited", retry_after=30.0)
+        exc = ToolboxRateLimitError(retry_after=30.0)
         response = handle_toolbox_error(exc)
         assert response.status_code == 429
         assert response.data["error"] == "RATE_LIMIT_EXCEEDED"
         assert response["Retry-After"] == "30"
 
     def test_returns_429_without_retry_header(self):
-        exc = ToolboxRateLimitError(429, "Rate limited")
+        exc = ToolboxRateLimitError()
         response = handle_toolbox_error(exc)
         assert response.status_code == 429
         assert "Retry-After" not in response
@@ -75,10 +69,10 @@ class TestHandleToolboxErrorGenericFallback:
         assert "Service Unavailable" not in response.data["message"]
 
     def test_auth_error_returns_502_no_config_leak(self):
-        exc = ToolboxAuthError(401, "Invalid API key")
+        exc = ToolboxAuthError()
         response = handle_toolbox_error(exc)
         assert response.status_code == 502
-        assert "API key" not in response.data["message"]
+        assert "API_KEY" not in response.data["message"]
         assert "debug_id" in response.data
 
     def test_generic_toolbox_error_returns_502(self):
