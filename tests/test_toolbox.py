@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Tests for ToolboxClient — HTTP transport, retry logic, batched estimation."""
+"""Tests for the translator ToolboxClient — endpoints, retry policy and errors inherited from django_utils."""
 
 import json
 from decimal import Decimal
@@ -11,11 +11,13 @@ from unittest.mock import patch
 import httpx
 import pytest
 import respx
+from django_utils.toolbox import ToolboxClient as BaseToolboxClient
 
 from django_utils_translator.clients.errors import (
     ToolboxAuthError,
     ToolboxBudgetExceededError,
     ToolboxConnectionError,
+    ToolboxNotConfiguredError,
     ToolboxNotFoundError,
     ToolboxRateLimitError,
     ToolboxServerError,
@@ -38,15 +40,18 @@ def mock_httpx():
 
 
 class TestClientInit:
-    def test_rejects_empty_base_url(self):
-        with patch("django_utils_translator.clients.toolbox.AI_TOOLBOX_BASE_URL", ""):
-            with pytest.raises(ValueError, match="AI_TOOLBOX_BASE_URL"):
-                ToolboxClient(CHANNEL)
+    def test_rejects_empty_base_url(self, settings):
+        settings.AI_TOOLBOX_BASE_URL = ""
+        with pytest.raises(ToolboxNotConfiguredError):
+            ToolboxClient(CHANNEL)
 
-    def test_rejects_empty_api_key(self):
-        with patch("django_utils_translator.clients.toolbox.AI_TOOLBOX_API_KEY", ""):
-            with pytest.raises(ValueError, match="AI_TOOLBOX_API_KEY"):
-                ToolboxClient(CHANNEL)
+    def test_rejects_empty_api_key(self, settings):
+        settings.AI_TOOLBOX_API_KEY = ""
+        with pytest.raises(ToolboxNotConfiguredError):
+            ToolboxClient(CHANNEL)
+
+    def test_subclasses_shared_client(self):
+        assert issubclass(ToolboxClient, BaseToolboxClient)
 
     def test_rejects_invalid_channel_idx(self):
         with pytest.raises(ValueError, match="Invalid channel_idx"):
@@ -228,14 +233,14 @@ class TestRaiseForStatus:
         assert exc_info.value.retry_after == 30.0
 
     def test_400_raises_validation_error(self, mock_httpx):
-        body = {"message": "Invalid input", "details": [{"field": "items"}]}
+        body = {"error": "VALIDATION_ERROR", "message": "Invalid input", "field_errors": {"items": ["required"]}}
         respx.post(f"{TRANSLATOR_PREFIX}/estimate/").mock(return_value=httpx.Response(400, json=body))
 
         with ToolboxClient(CHANNEL) as client:
             with pytest.raises(ToolboxValidationError) as exc_info:
                 client.estimate([{"text": "x"}], ["DE"])
 
-        assert exc_info.value.details == [{"field": "items"}]
+        assert exc_info.value.field_errors == {"items": ["required"]}
 
     def test_500_raises_server_error(self, mock_httpx):
         respx.get(f"{TRANSLATOR_PREFIX}/jobs/").mock(
@@ -253,7 +258,7 @@ class TestRaiseForStatus:
 
 
 class TestRetryBehavior:
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_retries_on_503_then_succeeds(self, mock_sleep, mock_httpx):
         route = respx.get(f"{TRANSLATOR_PREFIX}/jobs/")
         route.side_effect = [
@@ -267,7 +272,7 @@ class TestRetryBehavior:
         assert result == {"results": []}
         mock_sleep.assert_called_once()
 
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_does_not_retry_on_401(self, mock_sleep, mock_httpx):
         respx.get(f"{TRANSLATOR_PREFIX}/jobs/").mock(return_value=httpx.Response(401, json={}))
 
@@ -277,7 +282,7 @@ class TestRetryBehavior:
 
         mock_sleep.assert_not_called()
 
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_does_not_retry_on_400(self, mock_sleep, mock_httpx):
         respx.post(f"{TRANSLATOR_PREFIX}/estimate/").mock(return_value=httpx.Response(400, json={"message": "Bad"}))
 
@@ -287,7 +292,7 @@ class TestRetryBehavior:
 
         mock_sleep.assert_not_called()
 
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_exponential_backoff_delay(self, mock_sleep, mock_httpx):
         respx.get(f"{TRANSLATOR_PREFIX}/jobs/").mock(return_value=httpx.Response(503, json={"message": "Down"}))
 
@@ -299,7 +304,7 @@ class TestRetryBehavior:
         assert delays[0] == pytest.approx(2.0)
         assert delays[1] == pytest.approx(4.0)
 
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_uses_retry_after_on_429(self, mock_sleep, mock_httpx):
         route = respx.get(f"{TRANSLATOR_PREFIX}/jobs/")
         route.side_effect = [
@@ -317,7 +322,7 @@ class TestRetryBehavior:
 
 
 class TestConnectionErrors:
-    @patch("django_utils_translator.clients.toolbox.time.sleep")
+    @patch("django_utils.toolbox.client.time.sleep")
     def test_network_failure_raises_connection_error(self, mock_sleep, mock_httpx):
         respx.get(f"{TRANSLATOR_PREFIX}/jobs/").mock(side_effect=httpx.ConnectError("DNS failed"))
 
