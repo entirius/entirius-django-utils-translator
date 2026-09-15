@@ -16,6 +16,10 @@
   opt-in via `django_utils.toolbox.views.handle_toolbox_error`.
 - `create_job()` is no longer re-sent after a timeout, a dropped connection or a 5xx (duplicate paid jobs).
 - Retry warnings log under `django_utils.toolbox.client` instead of `process`.
+- Dependencies: `entirius-django-utils>=2.1.0` (new); `httpx`, `pydantic` and `nh3` floors unchanged.
+- Tests: `test_compat.py` (2.0.x constructors, attributes and wire format over the shared classes) and
+  `test_public_imports.py` (consumer import paths resolve, settings are read lazily).
+- `.github/CODEOWNERS`: `@entirius/maintainers-backend`.
 
 ## 2.0.0
 

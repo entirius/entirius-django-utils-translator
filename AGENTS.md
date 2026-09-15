@@ -75,7 +75,7 @@ format — never swap in the shared mapping here.
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `AI_TOOLBOX_*` | see `django_utils.toolbox.settings` | read lazily from Django settings on access |
-| `AI_TRANSLATOR_LANGUAGE_CODE_MAP` | 20 entries | ISO2 to provider code mapping (e.g. `gb` to `EN-GB`) |
+| `AI_TRANSLATOR_LANGUAGE_CODE_MAP` | 21 entries | ISO2 to provider code mapping (e.g. `gb` to `EN-GB`); read once at import, not lazily |
 
 ## Testing
 
