@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 — unreleased
+## 2.1.0 — 2026-09-15
 
 - `ToolboxClient` now subclasses `django_utils.toolbox.ToolboxClient` (`entirius-django-utils>=2.1.0`) and adds
   only the translator endpoints (`estimate`, `create_job`, `get_job`, `get_job_results`, `list_jobs`);
