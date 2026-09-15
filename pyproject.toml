@@ -19,10 +19,6 @@ dependencies = [
 dev  = ["ruff", "pre-commit"]
 test = ["pytest", "pytest-django", "respx>=0.21"]
 
-[tool.uv.sources]
-# Until entirius-django-utils 2.1.0 is on PyPI (release step replaces this with the published floor).
-entirius-django-utils = { path = "../entirius-django-utils", editable = true }
-
 [project.urls]
 Repository = "https://github.com/entirius/entirius-django-utils-translator"
 
