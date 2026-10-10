@@ -68,7 +68,9 @@ Subclass of `django_utils.toolbox.ToolboxClient` on `_url("ai-translator", …)`
 `ToolboxValidationError(message, details=)`, `ToolboxConnectionError(cause)`. Each subclasses its
 `django_utils.toolbox.errors` counterpart; `to_legacy_error()` re-types shared errors without calling the
 constructor. `details` is derived from the toolbox `field_errors`. `handle_toolbox_error` keeps the 2.0.x wire
-format — never swap in the shared mapping here.
+format — never swap in the shared mapping here. Two states take the shared 503 body: not configured
+(`AI_TOOLBOX_NOT_CONFIGURED`) and switched off (`AI_TOOLBOX_ENABLED = False` → `ToolboxDisabledError`, which the
+client raises un-retyped → `AI_TOOLBOX_DISABLED`).
 
 ### Settings
 
