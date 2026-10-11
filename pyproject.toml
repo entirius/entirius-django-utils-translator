@@ -1,7 +1,21 @@
 [project]
 name = "entirius-django-utils-translator"
 version = "2.1.0"
-description = "Shared translation infrastructure — ToolboxClient, error hierarchy, base schemas"
+description = "Shared AI translation client, errors, schemas and HTML sanitising for Entirius translator modules"
+keywords = ["django", "translation", "ai", "http-client", "localization", "ecommerce", "entirius"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Django",
+    "Framework :: Django :: 5.2",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 authors = [{ name = "Entirius" }]
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +34,11 @@ dev  = ["ruff", "pre-commit"]
 test = ["pytest", "pytest-django", "respx>=0.21"]
 
 [project.urls]
+Homepage = "https://docs.entirius.com/"
+Documentation = "https://github.com/entirius/entirius-django-utils-translator/tree/develop/docs"
 Repository = "https://github.com/entirius/entirius-django-utils-translator"
+Changelog = "https://github.com/entirius/entirius-django-utils-translator/blob/develop/CHANGELOG.md"
+Issues = "https://github.com/entirius/entirius-django-utils-translator/issues"
 
 [build-system]
 requires = ["hatchling"]
