@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## 2.2.0 — 2026-10-12
 
 - `views.handle_toolbox_error` maps `ToolboxDisabledError` (toolbox switched off with `AI_TOOLBOX_ENABLED = False`)
   to 503 `{"error": "AI_TOOLBOX_DISABLED", "message": …}` through the shared mapping, instead of the generic 502
