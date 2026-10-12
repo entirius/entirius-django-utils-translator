@@ -1,6 +1,6 @@
 [project]
 name = "entirius-django-utils-translator"
-version = "2.1.0"
+version = "2.2.0"
 description = "Shared AI translation client, errors, schemas and HTML sanitising for Entirius translator modules"
 keywords = ["django", "translation", "ai", "http-client", "localization", "ecommerce", "entirius"]
 classifiers = [
