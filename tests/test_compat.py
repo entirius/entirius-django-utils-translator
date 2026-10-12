@@ -125,3 +125,27 @@ def test_handle_error_with_invalid_retry_after_does_not_crash(retry_after):
 
     assert response.status_code == 429
     assert "Retry-After" not in response
+
+
+def test_disabled_toolbox_answers_503_with_the_shared_body(settings):
+    settings.AI_TOOLBOX_ENABLED = False
+
+    with pytest.raises(shared.ToolboxDisabledError) as exc_info:
+        ToolboxClient("europe")
+    response = handle_toolbox_error(exc_info.value)
+
+    assert response.status_code == 503
+    assert response.data == {
+        "error": "AI_TOOLBOX_DISABLED",
+        "message": "AI features are switched off on this instance.",
+    }
+
+
+def test_unconfigured_toolbox_keeps_its_503_code(settings):
+    settings.AI_TOOLBOX_API_KEY = ""
+
+    with pytest.raises(ToolboxNotConfiguredError) as exc_info:
+        ToolboxClient("europe")
+    response = handle_toolbox_error(exc_info.value)
+
+    assert (response.status_code, response.data["error"]) == (503, "AI_TOOLBOX_NOT_CONFIGURED")

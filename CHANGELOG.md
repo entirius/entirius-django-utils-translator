@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- `views.handle_toolbox_error` maps `ToolboxDisabledError` (toolbox switched off with `AI_TOOLBOX_ENABLED = False`)
+  to 503 `{"error": "AI_TOOLBOX_DISABLED", "message": …}` through the shared mapping, instead of the generic 502
+  `PROVIDER_ERROR`. `ToolboxClient()` raises the shared error un-retyped. Needs the entirius-django-utils release
+  that carries the switch.
+
 ## 2.1.0 — 2026-09-15
 
 - `ToolboxClient` now subclasses `django_utils.toolbox.ToolboxClient` (`entirius-django-utils>=2.1.0`) and adds
