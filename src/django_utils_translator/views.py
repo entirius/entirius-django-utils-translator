@@ -23,7 +23,7 @@ logger = logging.getLogger("process")
 
 def handle_toolbox_error(exc: ToolboxError) -> Response:
     """Map ToolboxError to appropriate DRF Response. Used by all translator ViewSets."""
-    if isinstance(exc, base.ToolboxNotConfiguredError):
+    if isinstance(exc, base.ToolboxNotConfiguredError | base.ToolboxDisabledError):
         return base_views.handle_toolbox_error(exc)
     if isinstance(exc, base.ToolboxBudgetExceededError):
         return Response({"error": "BUDGET_EXCEEDED", "message": exc.message}, status=status.HTTP_402_PAYMENT_REQUIRED)
